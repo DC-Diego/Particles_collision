@@ -6,6 +6,7 @@ export class Particle{
     this.radius = radius;
     this.color = color;
     this.force = [0,0];
+    this.velocity = [0,0]
     this.mass = mass;
   }
 
@@ -31,9 +32,22 @@ export class Particle{
   }
 
   move(){
-    console.log(this.force)
-    this.x += this.force[0];
-    this.y += this.force[1];
+    const ax = this.force[0]/this.mass;
+    const ay = this.force[1]/this.mass;
+
+    this.velocity[0] += ax; 
+    this.velocity[1] += ay; 
+
+    this.x += this.velocity[0];
+    this.y += this.velocity[1];
+    
+    
+    this.velocity[0] *= 0.999999;
+    this.velocity[1] *= 0.999999;
+
+
+    this.force[0] = this.force[1] = 0;
+
 
 
   }

@@ -9,6 +9,11 @@ const HEIGHT = document.body.clientHeight;
 canvas.width = WIDTH;
 canvas.height = HEIGHT;
 
+const PARTICLES_COLLISION = false;
+const BORDER_COLLISION = true;
+
+const EXPANSION = 4;
+
 function drawPoint(x,y,r,c){
   context.beginPath();
   context.arc(x, y, r, 0, 2*Math.PI);
@@ -25,13 +30,20 @@ const POINTS = [];
 
 
 
+function toHex([r,g,b]){
+  return "#"+Math.round(r).toString(16).padStart(2,'0')+""
+      +Math.round(g).toString(16).padStart(2,'0')+""
+      +Math.round(b).toString(16).padStart(2,'0')+"";
+
+
+}
+
 function getRandomColor(){
-  const r = Math.round(Math.random()*255);
-  const g = Math.round(Math.random()*255);
-  const b = Math.round(Math.random()*255);
-
-  return "#"+r.toString(16)+""+g.toString(16)+""+b.toString(16)+"";
-
+  const b = Math.round(Math.max(Math.random(),0.9)*255);
+  const g = Math.round(Math.min(Math.random(),0.8)*255);
+  const r = Math.round(Math.min(Math.random(),0.2)*255);
+  // return "#ff0000"
+  return toHex([r,g,b]);
 
 }
 
@@ -40,21 +52,28 @@ console.log(getRandomColor())
 
 
 
-function createPoints(){
-  for(let i =0; i < 500;i++){
-    const mass = Math.random()*2+0.1;
-    const p1 = new Particle(Math.random()*WIDTH,Math.random()*HEIGHT,5, mass ,getRandomColor());
-    const fx = Math.random()*2-1;
-    const fy = Math.random()*2-1;
-    p1.applyForce([fx,fy], mass);
-    POINTS.push(p1);
-    
+function createPoints() {
+  for (let i = 0; i < 10000; i++) {
+    const n = Math.random()*10;
+    const mass =  Math.max(1, Math.min(2,n));
 
+    const p = new Particle(
+      (Math.random() -0.5)* WIDTH,
+      (Math.random() -0.5)* HEIGHT,
+      mass,
+      mass,
+      getRandomColor()
+    );
 
+    p.velocity = [
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ];
+
+    POINTS.push(p);
   }
-
-
 }
+
 createPoints();
 /*
 const p1 = new Particle(50,300,5, 1 ,getRandomColor());
@@ -64,42 +83,150 @@ p2.applyForce([-1, 0], 2);
 
 
 POINTS.push(p1);
-POINTS.push(p2);*/
+POINTS.push(p2);
+*/
+
+function resolveCollision(a, b) {
+
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  const nx = dx / distance;
+  const ny = dy / distance;
+
+  // Relative velocity
+  const rvx = b.velocity[0] - a.velocity[0];
+  const rvy = b.velocity[1] - a.velocity[1];
+
+  // Relative velocity along collision normal
+  const velocityAlongNormal = rvx * nx + rvy * ny;
+
+  // Already moving apart
+  if (velocityAlongNormal > 0) return;
+
+  const restitution = 1;
+
+  const impulse =
+    -(1 + restitution) * velocityAlongNormal /
+    (1 / a.mass + 1 / b.mass);
+
+  const ix = impulse * nx;
+  const iy = impulse * ny;
+
+  a.velocity[0] -= ix / a.mass;
+  a.velocity[1] -= iy / a.mass;
+
+  b.velocity[0] += ix / b.mass;
+  b.velocity[1] += iy / b.mass;
+}
 
 
 
+function radialForce(p){
+  const pos = [p.x, p.y];
+  
 
-const run = setInterval(()=>{
+
+  const n = Math.sqrt(pos[0]*pos[0]+pos[1]*pos[1]);
+  // const n = 1;
+
+  const newForce = [pos[1]/n-pos[0]/(n*0.05),-pos[0]/n-pos[1]/(n)];
+  return newForce;
+
+
+
+}
+
+function rgb(hex){
+  const r = parseInt(hex.slice(1,3), 16) ;
+  const g = parseInt(hex.slice(3,5), 16) ;
+  const b = parseInt(hex.slice(5,7), 16) ;
+  return [r,g,b];
+
+}
+
+
+function lerpColor(a1, a2, l) {
+  const c1 = rgb(a1);
+  const c2 = rgb(a2);
+
+  return toHex([
+    c1[0] * (1 - l) + c2[0] * l,
+    c1[1] * (1 - l) + c2[1] * l,
+    c1[2] * (1 - l) + c2[2] * l
+  ]);
+}
+
+
+const run = setInterval(() => {
+
   clearCanvas();
-  POINTS.forEach(p=>{
-    drawPoint(p.x,p.y,p.radius,p.color);
-    const p_force = [p.force[0], p.force[1]]
-    POINTS.forEach(q=>{
-      if(p!=q){
-        if(p.isColliding(q)){
-          const q_force = [q.force[0], q.force[1]]
-          const resultant = [q.force[0]*q.mass+p.force[0]*p.mass ,q.force[1]*q.mass+p.force[1]*p.mass]
-          p.applyForce(q_force, q.mass);
-          q.applyForce([p_force[0],p_force[1]], p.mass);
-          // p.setForce(resultant);
-          // q.setForce(resultant);
-        }
 
-      }
+  POINTS.forEach(p => {
 
-
-    })
-
-    
     p.move();
 
+    if(BORDER_COLLISION){
+      if (p.x - p.radius <= -WIDTH*EXPANSION/2) {
+        p.x = p.radius;
+        p.velocity[0] *= -1;
+      }
+
+      if (p.x + p.radius >= WIDTH*EXPANSION/2) {
+        p.x = WIDTH - p.radius;
+        p.velocity[0] *= -1;
+      }
+
+      if (p.y - p.radius <= -HEIGHT*EXPANSION/2) {
+        p.y = p.radius;
+        p.velocity[1] *= -1;
+      }
+
+      if (p.y + p.radius >= HEIGHT*EXPANSION/2) {
+        p.y = HEIGHT - p.radius;
+        p.velocity[1] *= -1;
+      }
+    }
+    // p.velocity = radialForce(p);
+    p.applyForce(radialForce(p));
   });
 
+  if(PARTICLES_COLLISION){
+    for (let i = 0; i < POINTS.length; i++) {
+
+      for (let j = i + 1; j < POINTS.length; j++) {
+
+        const p = POINTS[i];
+        const q = POINTS[j];
+
+        if (p.isColliding(q)) {
+          resolveCollision(p, q);
+        }
+      }
+    }
+  }
 
 
-
-}, 10);
-
+  POINTS.forEach(p => {
+    const w =Math.hypot(p.velocity[0],p.velocity[1]);
+    const d =Math.hypot(p.x/WIDTH*2,p.y/HEIGHT*2);
+    // console.log(w)
+    const l1 =       lerpColor(p.color,"#4020ff", Math.min(w/100,1));
+    const l2 =       lerpColor("#ffffff",l1, Math.min(d,1))
+ 
+    drawPoint(
+      p.x/EXPANSION*2+WIDTH/2,
+      p.y/EXPANSION*2+HEIGHT/2,
+      p.radius,
+      l2
+      // p.color
+      // lerpColor("#ffffff",p.color, Math.min(p.x*p.x/(WIDTH*WIDTH/8)+p.y*p.y/(HEIGHT*HEIGHT/8),1))
+      );
+    });
+    
+  }, 5);
 
 
 
